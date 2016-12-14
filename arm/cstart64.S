@@ -21,12 +21,14 @@ start:
 	 * The physical address of the dtb is in x0, x1-x3 are reserved
 	 * See the kernel doc Documentation/arm64/booting.txt
 	 */
-	mov	x4, #1
-	msr	spsel, x4
+	mov	x20, x0
+
+	/* set the stack */
+	mov	x0, #1
+	msr	spsel, x0
 	isb
-	adr     x4, stackptr
-	mov	sp, x4
-	stp	x0, x1, [sp, #-16]!
+	adr     x0, stackptr
+	mov	sp, x0
 
 	/* Enable FP/ASIMD */
 	mov	x0, #(3 << 20)
@@ -36,7 +38,7 @@ start:
 	bl	exceptions_init
 
 	/* complete setup */
-	ldp	x0, x1, [sp], #16
+	mov	x0, x20
 	bl	setup
 
 	/* run the test */
@@ -71,6 +73,9 @@ secondary_entry:
 	bl	asm_mmu_enable
 
 	/* set the stack */
+	mov	x0, #1
+	msr	spsel, x0
+	isb
 	adr	x1, secondary_data
 	ldr	x0, [x1]
 	mov	sp, x0
