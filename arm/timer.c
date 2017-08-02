@@ -67,6 +67,26 @@ static void write_ptimer_ctl(u64 val)
 	write_sysreg(val, cntp_ctl_el0);
 }
 
+static u64 read_hyp_timer_cval(void)
+{
+	return read_sysreg(cnthp_cval_el2);
+}
+
+static void write_hyp_timer_cval(u64 val)
+{
+	write_sysreg(val, cnthp_cval_el2);
+}
+
+static u64 read_hyp_timer_ctl(void)
+{
+	return read_sysreg(cnthp_ctl_el2);
+}
+
+static void write_hyp_timer_ctl(u64 val)
+{
+	write_sysreg(val, cnthp_ctl_el2);
+}
+
 struct timer_info {
 	u32 irq;
 	u32 irq_flags;
@@ -94,6 +114,15 @@ static struct timer_info ptimer_info = {
 	.write_cval = write_ptimer_cval,
 	.read_ctl = read_ptimer_ctl,
 	.write_ctl = write_ptimer_ctl,
+};
+
+static struct timer_info hyp_timer_info = {
+	.irq_received = false,
+	.read_counter = read_ptimer_counter,
+	.read_cval = read_hyp_timer_cval,
+	.write_cval = write_hyp_timer_cval,
+	.read_ctl = read_hyp_timer_ctl,
+	.write_ctl = write_hyp_timer_ctl,
 };
 
 static void set_timer_irq_enabled(struct timer_info *info, bool enabled)
@@ -126,6 +155,8 @@ static void irq_handler(struct pt_regs *regs)
 		info = &vtimer_info;
 	} else if (irqnr == PPI(ptimer_info.irq)) {
 		info = &ptimer_info;
+	} else if (irqnr == PPI(hyp_timer_info.irq)) {
+		info = &hyp_timer_info;
 	} else {
 		report_info("Unexpected interrupt: %d\n", irqnr);
 		return;
@@ -218,6 +249,13 @@ static void test_ptimer(void)
 	report_prefix_pop();
 }
 
+static void test_hyp_timer(void)
+{
+	report_prefix_push("hyp_timer-busy-loop");
+	test_timer(&hyp_timer_info);
+	report_prefix_pop();
+}
+
 static void test_init(void)
 {
 	const struct fdt_property *prop;
@@ -237,6 +275,9 @@ static void test_init(void)
 	assert(fdt32_to_cpu(data[6]) == 1);
 	vtimer_info.irq = fdt32_to_cpu(data[7]);
 	vtimer_info.irq_flags = fdt32_to_cpu(data[8]);
+	assert(fdt32_to_cpu(data[9]) == 1);
+	hyp_timer_info.irq = fdt32_to_cpu(data[10]);
+	hyp_timer_info.irq_flags = fdt32_to_cpu(data[11]);
 
 	gic_enable_defaults();
 
@@ -250,6 +291,8 @@ static void test_init(void)
 	}
 
 	install_irq_handler(EL1H_IRQ, irq_handler);
+	if (current_level() == CurrentEL_EL2)
+		install_irq_handler(EL2H_IRQ, irq_handler);
 	local_irq_enable();
 }
 
@@ -268,11 +311,18 @@ static void print_ptimer_info(void)
 	printf("CNTP_CVAL_EL0: 0x%016lx\n", read_sysreg(cntp_cval_el0));
 }
 
+static void print_hyp_timer_info(void)
+{
+	printf("CNTPCT_EL0   : 0x%016lx\n", read_sysreg(cntpct_el0));
+	printf("CNTHP_CTL_EL0 : 0x%016lx\n", read_sysreg(cnthp_ctl_el2));
+	printf("CNTHP_CVAL_EL0: 0x%016lx\n", read_sysreg(cnthp_cval_el2));
+}
 
 int main(int argc, char **argv)
 {
 	bool run_ptimer_test = false;
 	bool run_vtimer_test = false;
+	bool run_hyp_timer_test = false;
 
 	/* Check if we should also check the physical timer */
 	if (argc > 1) {
@@ -280,6 +330,10 @@ int main(int argc, char **argv)
 			run_vtimer_test = true;
 		} else if (strcmp(argv[1], "ptimer") == 0) {
 			run_ptimer_test = true;
+		} else if (strcmp(argv[1], "hyp-timer") == 0) {
+			if (current_level() != CurrentEL_EL2)
+				report_abort("must boot in EL2 to test hyp-timer");
+			run_hyp_timer_test = true;
 		} else {
 			report_abort("Unknown option '%s'", argv[1]);
 		}
@@ -291,6 +345,8 @@ int main(int argc, char **argv)
 		print_vtimer_info();
 	else if (run_ptimer_test)
 		print_ptimer_info();
+	else if (run_hyp_timer_test)
+		print_hyp_timer_info();
 
 	test_init();
 
@@ -298,7 +354,8 @@ int main(int argc, char **argv)
 		test_vtimer();
 	else if (run_ptimer_test)
 		test_ptimer();
-
+	else if (run_hyp_timer_test)
+		test_hyp_timer();
 
 	return report_summary();
 }
