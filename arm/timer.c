@@ -337,8 +337,9 @@ int main(int argc, char **argv)
 			run_ptimer_test = true;
 		} else if (strcmp(argv[1], "hyp-timer") == 0) {
 			if (current_level() != CurrentEL_EL2)
-				report_abort("must boot in EL2 to test hyp-timer");
-			run_hyp_timer_test = true;
+				report_skip("tests must be started in EL2");
+			else
+				run_hyp_timer_test = true;
 		} else {
 			report_abort("Unknown option '%s'", argv[1]);
 		}
