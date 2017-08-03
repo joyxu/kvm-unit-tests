@@ -249,6 +249,8 @@ void vector_handlers_default_init(vector_fn *handlers)
 	handlers[EL0_IRQ_64]	= default_vector_irq_handler;
 	handlers[EL2H_SYNC]	= default_vector_sync_handler;
 	handlers[EL2H_IRQ]	= default_vector_irq_handler;
+	handlers[EL1_SYNC_64]	= default_vector_sync_handler;
+	handlers[EL1_IRQ_64]	= default_vector_irq_handler;
 }
 
 void do_handle_exception(enum vector v, struct pt_regs *regs, unsigned int esr)
